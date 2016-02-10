@@ -2,6 +2,20 @@ en:
   vagrant_aws:
     already_status: |-
       The machine is already %{status}.
+    burning_ami: |-
+      Waiting for the AMI '%{ami_id}' to burn...
+    elb:
+      adjusting: |-
+        Adjusting availability zones of ELB %{elb_name}...
+      registering: |-
+        Registering %{instance_id} at ELB %{elb_name}...
+      deregistering: |-
+        Deregistering %{instance_id} from ELB %{elb_name}...
+      ok: |-
+        ok
+      skipped: |-
+        skipped
+
     launching_instance: |-
       Launching an instance with the following settings...
     launch_no_keypair: |-
@@ -14,6 +28,10 @@ en:
       to SSH into it.
     not_created: |-
       Instance is not created. Please run `vagrant up` first.
+    packaging_instance: |-
+      Burning instance %{instance_id} into an ami
+    packaging_instance_complete: |-
+      Burn was successful in %{time_seconds}s
     ready: |-
       Machine is booted and ready for use!
     rsync_not_found_warning: |-
@@ -21,6 +39,9 @@ en:
       Make sure rsync is installed and the binary can be found in the PATH.
     rsync_folder: |-
       Rsyncing folder: %{hostpath} => %{guestpath}
+    source_dest_checks_no_vpc: |-
+      Warning! Ignoring source_dest_checks flag as it can only be configured on
+      a VPC instance.
     starting: |-
       Starting the instance...
     stopping: |-
@@ -46,13 +67,15 @@ en:
       access_key_id_required: |-
         An access key ID must be specified via "access_key_id"
       ami_required: |-
-        An AMI must be configured via "ami"
+        An AMI must be configured via "ami" (region: #{region})
       private_key_missing: |-
         The specified private key for AWS could not be found
       region_required: |-
         A region must be specified via "region"
       secret_access_key_required: |-
         A secret access key is required via "secret_access_key"
+      subnet_id_required_with_public_ip: |-
+        If you assign a public IP address to an instance in a VPC, a subnet must be specifed via "subnet_id"
 
     errors:
       fog_error: |-
@@ -71,8 +94,19 @@ en:
         set waiting for the instance to become ready is %{timeout} seconds.
         Please verify that the machine properly boots. If you need more time
         set the `instance_ready_timeout` configuration on the AWS provider.
+      instance_package_error: |-
+        There was an error packaging the instance. See details below for more info.
+
+        AMI Id: %{ami_id}
+        Error: %{err}
+      instance_package_timeout: |-
+        The AMI failed to become "ready" in AWS. The timeout currently
+        set waiting for the instance to become ready is %{timeout} seconds. For 
+        larger instances AMI burning may take long periods of time. Please
+        ensure the timeout is set high enough, it can be changed by adjusting
+        the `instance_package_timeout` configuration on the AWS provider.
       rsync_error: |-
-        There was an error when attempting to rsync a share folder.
+        There was an error when attempting to rsync a shared folder.
         Please inspect the error message below for more info.
 
         Host path: %{hostpath}
@@ -84,6 +118,8 @@ en:
 
         Host path: %{hostpath}
         Error: %{err}
+      elb_does_not_exist: |-
+        ELB configured for the instance does not exist
 
     states:
       short_not_created: |-
@@ -99,7 +135,7 @@ en:
       short_stopping: |-
         stopping
       long_stopping: |-
-        The EC2 instance is stopping. Wait until is completely stopped to 
+        The EC2 instance is stopping. Wait until is completely stopped to
         run `vagrant up` and start it.
 
       short_pending: |-

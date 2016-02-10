@@ -1,4 +1,5 @@
 require "vagrant-aws/config"
+require 'rspec/its'
 
 describe VagrantPlugins::AWS::Config do
   let(:instance) { described_class.new }
@@ -19,24 +20,32 @@ describe VagrantPlugins::AWS::Config do
     its("ami")               { should be_nil }
     its("availability_zone") { should be_nil }
     its("instance_ready_timeout") { should == 120 }
-    its("instance_type")     { should == "m1.small" }
+    its("instance_check_interval") { should == 2 }
+    its("instance_package_timeout") { should == 600 }
+    its("instance_type")     { should == "m3.medium" }
     its("keypair_name")      { should be_nil }
     its("private_ip_address") { should be_nil }
     its("region")            { should == "us-east-1" }
     its("secret_access_key") { should be_nil }
+    its("session_token") { should be_nil }
     its("security_groups")   { should == [] }
     its("subnet_id")         { should be_nil }
     its("iam_instance_profile_arn") { should be_nil }
     its("iam_instance_profile_name") { should be_nil }
     its("tags")              { should == {} }
+    its("package_tags")      { should == {} }
     its("user_data")         { should be_nil }
-    its("use_iam_profile")   { should be_false }
+    its("use_iam_profile")   { should be false }
     its("block_device_mapping")  {should == [] }
     its("elastic_ip")        { should be_nil }
     its("terminate_on_shutdown") { should == false }
     its("ssh_host_attribute") { should be_nil }
     its("monitoring")        { should == false }
     its("ebs_optimized")     { should == false }
+    its("source_dest_check")       { should be_nil }
+    its("associate_public_ip")     { should == false }
+    its("unregister_elb_from_az") { should == true }
+    its("tenancy")     { should == "default" }
   end
 
   describe "overriding defaults" do
@@ -45,11 +54,12 @@ describe VagrantPlugins::AWS::Config do
     # each of these attributes to "foo" in isolation, and reads the value
     # and asserts the proper result comes back out.
     [:access_key_id, :ami, :availability_zone, :instance_ready_timeout,
-      :instance_type, :keypair_name, :ssh_host_attribute, :ebs_optimized,
-      :region, :secret_access_key, :monitoring,
-      :subnet_id, :tags, :elastic_ip, :terminate_on_shutdown,
-      :iam_instance_profile_arn, :iam_instance_profile_name,
-      :use_iam_profile, :user_data, :block_device_mapping].each do |attribute|
+      :instance_package_timeout, :instance_type, :keypair_name, :ssh_host_attribute,
+      :ebs_optimized, :region, :secret_access_key, :session_token, :monitoring,
+      :associate_public_ip, :subnet_id, :tags, :package_tags, :elastic_ip,
+      :terminate_on_shutdown, :iam_instance_profile_arn, :iam_instance_profile_name,
+      :use_iam_profile, :user_data, :block_device_mapping,
+      :source_dest_check].each do |attribute|
 
       it "should not default #{attribute} if overridden" do
         instance.send("#{attribute}=".to_sym, "foo")
@@ -74,12 +84,14 @@ describe VagrantPlugins::AWS::Config do
 
       its("access_key_id")     { should be_nil }
       its("secret_access_key") { should be_nil }
+      its("session_token")     { should be_nil }
     end
 
     context "with EC2 credential environment variables" do
       before :each do
         ENV.stub(:[]).with("AWS_ACCESS_KEY").and_return("access_key")
         ENV.stub(:[]).with("AWS_SECRET_KEY").and_return("secret_key")
+        ENV.stub(:[]).with("AWS_SESSION_TOKEN").and_return("session_token")
       end
 
       subject do
@@ -90,6 +102,7 @@ describe VagrantPlugins::AWS::Config do
 
       its("access_key_id")     { should == "access_key" }
       its("secret_access_key") { should == "secret_key" }
+      its("session_token")     { should == "session_token" }
     end
   end
 
@@ -100,6 +113,7 @@ describe VagrantPlugins::AWS::Config do
     let(:config_keypair_name)      { "foo" }
     let(:config_region)            { "foo" }
     let(:config_secret_access_key) { "foo" }
+    let(:config_session_token)     { "foo" }
 
     def set_test_values(instance)
       instance.access_key_id     = config_access_key_id
@@ -108,6 +122,7 @@ describe VagrantPlugins::AWS::Config do
       instance.keypair_name      = config_keypair_name
       instance.region            = config_region
       instance.secret_access_key = config_secret_access_key
+      instance.session_token     = config_session_token
     end
 
     it "should raise an exception if not finalized" do
@@ -133,6 +148,7 @@ describe VagrantPlugins::AWS::Config do
       its("keypair_name")      { should == config_keypair_name }
       its("region")            { should == config_region }
       its("secret_access_key") { should == config_secret_access_key }
+      its("session_token")     { should == config_session_token }
     end
 
     context "with a specific config set" do
@@ -157,6 +173,7 @@ describe VagrantPlugins::AWS::Config do
       its("keypair_name")      { should == config_keypair_name }
       its("region")            { should == region_name }
       its("secret_access_key") { should == config_secret_access_key }
+      its("session_token")     { should == config_session_token }
     end
 
     describe "inheritance of parent config" do
@@ -199,6 +216,8 @@ describe VagrantPlugins::AWS::Config do
       it "should merge the tags and block_device_mappings" do
         first.tags["one"] = "one"
         second.tags["two"] = "two"
+        first.package_tags["three"] = "three"
+        second.package_tags["four"] = "four"
         first.block_device_mapping = [{:one => "one"}]
         second.block_device_mapping = [{:two => "two"}]
 
@@ -206,6 +225,10 @@ describe VagrantPlugins::AWS::Config do
         third.tags.should == {
           "one" => "one",
           "two" => "two"
+        }
+        third.package_tags.should == {
+          "three" => "three",
+          "four" => "four"
         }
         third.block_device_mapping.index({:one => "one"}).should_not be_nil
         third.block_device_mapping.index({:two => "two"}).should_not be_nil
